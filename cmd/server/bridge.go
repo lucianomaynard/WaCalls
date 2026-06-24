@@ -13,7 +13,8 @@ type Bridge struct {
 	localTrack *webrtc.TrackLocalStaticSample
 	log        *slog.Logger
 
-	OnBrowserRTP func(payload []byte)
+	OnBrowserRTP  func(payload []byte)
+	OnTerminalICE func()
 }
 
 func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
@@ -56,6 +57,11 @@ func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
 
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
 		log.Debug("browser ice state", "state", s.String())
+		if s == webrtc.ICEConnectionStateFailed || s == webrtc.ICEConnectionStateClosed {
+			if br.OnTerminalICE != nil {
+				br.OnTerminalICE()
+			}
+		}
 	})
 
 	if err := pc.SetRemoteDescription(webrtc.SessionDescription{Type: webrtc.SDPTypeOffer, SDP: offerSDP}); err != nil {
