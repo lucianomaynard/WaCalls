@@ -18,6 +18,8 @@ func main() {
 	staticDir := flag.String("static", "client/dist", "static client directory (optional)")
 	debug := flag.Bool("debug", false, "verbose logging")
 	maxCalls := flag.Int("max-calls-per-session", 8, "max concurrent calls per session (0 = unlimited)")
+	publicIP := flag.String("public-ip", "", "public IP advertised in WebRTC ICE candidates (for remote browsers behind NAT)")
+	udpMuxPort := flag.Int("udp-mux-port", 0, "single UDP port for WebRTC media via ICE UDP mux (0 = default ephemeral ports)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -30,7 +32,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv, err := newServer(ctx, *dbPath, *staticDir, *maxCalls, log)
+	srv, err := newServer(ctx, *dbPath, *staticDir, *maxCalls, *publicIP, *udpMuxPort, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)

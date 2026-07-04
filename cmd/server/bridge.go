@@ -27,8 +27,16 @@ type Bridge struct {
 	OnTerminalICE func()
 }
 
-func NewBridge(offerSDP string, log *slog.Logger) (*Bridge, string, error) {
-	pc, err := webrtc.NewPeerConnection(webrtc.Configuration{})
+// NewBridge cria a ponte do browser. Se api != nil, usa-a (SettingEngine com IP
+// público + UDP mux, para browsers remotos); senão cai no default LAN do pion.
+func NewBridge(api *webrtc.API, offerSDP string, log *slog.Logger) (*Bridge, string, error) {
+	var pc *webrtc.PeerConnection
+	var err error
+	if api != nil {
+		pc, err = api.NewPeerConnection(webrtc.Configuration{})
+	} else {
+		pc, err = webrtc.NewPeerConnection(webrtc.Configuration{})
+	}
 	if err != nil {
 		return nil, "", err
 	}

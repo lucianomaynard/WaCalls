@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"net"
 
+	"github.com/pion/webrtc/v4"
 	"go.mau.fi/whatsmeow/store/sqlstore"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	_ "modernc.org/sqlite"
@@ -15,6 +17,32 @@ type server struct {
 	sessions  *SessionManager
 	log       *slog.Logger
 	staticDir string
+	// webrtcAPI, quando não-nil, carrega o SettingEngine do pion configurado para
+	// browsers REMOTOS (NAT1To1 com IP público + UDP mux numa porta fixa). Nil = LAN default.
+	webrtcAPI *webrtc.API
+}
+
+// buildWebRTCAPI monta a *webrtc.API para navegadores remotos.
+// - publicIP != "" faz o pion anunciar esse IP nos candidatos ICE (NAT 1:1).
+// - udpMuxPort > 0 força toda a mídia por UMA porta UDP (fácil de liberar/rotear).
+// Retorna (nil, nil) quando nada configurado → mantém o comportamento LAN original.
+func buildWebRTCAPI(publicIP string, udpMuxPort int, log *slog.Logger) (*webrtc.API, error) {
+	if publicIP == "" && udpMuxPort == 0 {
+		return nil, nil
+	}
+	se := webrtc.SettingEngine{}
+	if publicIP != "" {
+		se.SetNAT1To1IPs([]string{publicIP}, webrtc.ICECandidateTypeHost)
+	}
+	if udpMuxPort > 0 {
+		conn, err := net.ListenUDP("udp", &net.UDPAddr{IP: net.IPv4zero, Port: udpMuxPort})
+		if err != nil {
+			return nil, err
+		}
+		se.SetICEUDPMux(webrtc.NewICEUDPMux(nil, conn))
+		log.Info("webrtc udp mux ready", "port", udpMuxPort, "publicIP", publicIP)
+	}
+	return webrtc.NewAPI(webrtc.WithSettingEngine(se)), nil
 }
 
 func openDB(dbPath string) (*sql.DB, error) {
@@ -27,7 +55,7 @@ func openDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log *slog.Logger) (*server, error) {
+func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publicIP string, udpMuxPort int, log *slog.Logger) (*server, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -50,5 +78,10 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, log 
 	mgr := newSessionManager(ctx, container, broker, store, waLogger, log, maxCalls)
 	broker.SnapshotFn = mgr.snapshotEvents
 
-	return &server{broker: broker, sessions: mgr, log: log, staticDir: staticDir}, nil
+	webrtcAPI, err := buildWebRTCAPI(publicIP, udpMuxPort, log)
+	if err != nil {
+		return nil, err
+	}
+
+	return &server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, webrtcAPI: webrtcAPI}, nil
 }
