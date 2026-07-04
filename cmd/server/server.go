@@ -20,6 +20,11 @@ type server struct {
 	// webrtcAPI, quando não-nil, carrega o SettingEngine do pion configurado para
 	// browsers REMOTOS (NAT1To1 com IP público + UDP mux numa porta fixa). Nil = LAN default.
 	webrtcAPI *webrtc.API
+	// chatwoot persiste a integração Chatwoot por sessão.
+	chatwoot *chatwootStore
+	// publicBaseURL é a base pública usada para montar a URL do webhook do Chatwoot
+	// (o engine é interno; normalmente é a URL pública do gateway).
+	publicBaseURL string
 }
 
 // buildWebRTCAPI monta a *webrtc.API para navegadores remotos.
@@ -55,7 +60,7 @@ func openDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publicIP string, udpMuxPort int, log *slog.Logger) (*server, error) {
+func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publicIP string, udpMuxPort int, publicBaseURL string, log *slog.Logger) (*server, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -83,5 +88,18 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publ
 		return nil, err
 	}
 
-	return &server{broker: broker, sessions: mgr, log: log, staticDir: staticDir, webrtcAPI: webrtcAPI}, nil
+	chatwoot, err := newChatwootStore(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	return &server{
+		broker:        broker,
+		sessions:      mgr,
+		log:           log,
+		staticDir:     staticDir,
+		webrtcAPI:     webrtcAPI,
+		chatwoot:      chatwoot,
+		publicBaseURL: publicBaseURL,
+	}, nil
 }

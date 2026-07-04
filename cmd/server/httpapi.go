@@ -27,6 +27,12 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{sid}/calls/{id}", s.handleEndCall)
 	mux.HandleFunc("GET /api/sessions/{sid}/history", s.handleHistory)
 
+	// Integração com Chatwoot (por sessão).
+	mux.HandleFunc("GET /api/sessions/{sid}/chatwoot", s.handleChatwootGet)
+	mux.HandleFunc("PUT /api/sessions/{sid}/chatwoot", s.handleChatwootSave)
+	mux.HandleFunc("DELETE /api/sessions/{sid}/chatwoot", s.handleChatwootDelete)
+	mux.HandleFunc("POST /api/sessions/{sid}/chatwoot/webhook", s.handleChatwootWebhook)
+
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 
 	if s.staticDir != "" {
@@ -41,7 +47,7 @@ func withCORS(h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Client-Id")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
