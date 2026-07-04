@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -32,6 +33,9 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("PUT /api/sessions/{sid}/chatwoot", s.handleChatwootSave)
 	mux.HandleFunc("DELETE /api/sessions/{sid}/chatwoot", s.handleChatwootDelete)
 	mux.HandleFunc("POST /api/sessions/{sid}/chatwoot/webhook", s.handleChatwootWebhook)
+
+	// Gravações de chamada (WAV). Servido pelo gateway como proxy.
+	mux.HandleFunc("GET /api/recordings/{id}", s.handleRecording)
 
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 
@@ -163,6 +167,40 @@ func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// handleRecording serve o WAV de uma chamada gravada, por callID.
+func (s *server) handleRecording(w http.ResponseWriter, r *http.Request) {
+	if s.recDir == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recording disabled"})
+		return
+	}
+	id := r.PathValue("id")
+	if !safeRecID(id) {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
+		return
+	}
+	p := filepath.Join(s.recDir, id+".wav")
+	if fi, err := os.Stat(p); err != nil || fi.IsDir() {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no recording"})
+		return
+	}
+	w.Header().Set("Content-Type", "audio/wav")
+	http.ServeFile(w, r, p)
+}
+
+// safeRecID permite só caracteres seguros (bloqueia path traversal).
+func safeRecID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	for _, c := range id {
+		ok := (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '-' || c == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *server) doStartCall(sess *Session, w http.ResponseWriter, r *http.Request) {
 	if sess.client.Store.ID == nil {
 		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "not paired"})
@@ -222,10 +260,25 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 
 	bridge.OnBrowserPCM = func(pcm []float32) {
 		ac.cm.FeedCapturedPCM(pcm)
+		if ac.rec != nil {
+			ac.rec.WriteAgent(pcm) // grava o lado do agente
+		}
 	}
 	bridge.OnTerminalICE = func() {
 		go sess.terminateCall(callID, core.EndCallReasonUserEnded)
 	}
+
+	// Inicia a gravação (WAV mono-mix) quando o caminho de áudio é estabelecido.
+	// Cobre entrada e saída, pois ambas passam por aqui ao conectar o áudio.
+	if s.recDir != "" && ac.rec == nil {
+		if rec, err := NewRecorder(filepath.Join(s.recDir, callID+".wav")); err == nil {
+			ac.rec = rec
+			rec.Start()
+		} else {
+			s.log.Warn("recording start failed", "call", callID, "err", err)
+		}
+	}
+
 	sess.setBridge(callID, bridge)
 	writeJSON(w, http.StatusOK, map[string]string{"sdp_answer": answer})
 }

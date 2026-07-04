@@ -89,7 +89,13 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
 		ac, ok := s.reg.get(callID)
-		if !ok || ac.bridge == nil {
+		if !ok {
+			return
+		}
+		if ac.rec != nil {
+			ac.rec.WritePeer(pcm16) // grava o lado do lead
+		}
+		if ac.bridge == nil {
 			return
 		}
 		_ = ac.bridge.WritePCM(pcm16)
@@ -246,6 +252,9 @@ func (s *Session) removeCall(callID string) {
 	}
 	if ac.bridge != nil {
 		ac.bridge.Close()
+	}
+	if ac.rec != nil {
+		ac.rec.Close() // fecha o WAV e corrige o header
 	}
 }
 

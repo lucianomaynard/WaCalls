@@ -21,6 +21,7 @@ func main() {
 	publicIP := flag.String("public-ip", "", "public IP advertised in WebRTC ICE candidates (for remote browsers behind NAT)")
 	udpMuxPort := flag.Int("udp-mux-port", 0, "single UDP port for WebRTC media via ICE UDP mux (0 = default ephemeral ports)")
 	publicBaseURL := flag.String("public-base-url", "", "public base URL used to build the Chatwoot webhook (usually the gateway public URL)")
+	recordDir := flag.String("record-dir", "", "directory to store call recordings as WAV (empty = recording disabled)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -33,7 +34,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	srv, err := newServer(ctx, *dbPath, *staticDir, *maxCalls, *publicIP, *udpMuxPort, *publicBaseURL, log)
+	srv, err := newServer(ctx, *dbPath, *staticDir, *maxCalls, *publicIP, *udpMuxPort, *publicBaseURL, *recordDir, log)
 	if err != nil {
 		log.Error("startup failed", "err", err)
 		os.Exit(1)

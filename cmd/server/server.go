@@ -25,6 +25,8 @@ type server struct {
 	// publicBaseURL é a base pública usada para montar a URL do webhook do Chatwoot
 	// (o engine é interno; normalmente é a URL pública do gateway).
 	publicBaseURL string
+	// recDir é o diretório onde as gravações WAV são salvas ("" = gravação desligada).
+	recDir string
 }
 
 // buildWebRTCAPI monta a *webrtc.API para navegadores remotos.
@@ -60,7 +62,7 @@ func openDB(dbPath string) (*sql.DB, error) {
 	return db, nil
 }
 
-func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publicIP string, udpMuxPort int, publicBaseURL string, log *slog.Logger) (*server, error) {
+func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publicIP string, udpMuxPort int, publicBaseURL, recordDir string, log *slog.Logger) (*server, error) {
 	db, err := openDB(dbPath)
 	if err != nil {
 		return nil, err
@@ -101,5 +103,6 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publ
 		webrtcAPI:     webrtcAPI,
 		chatwoot:      chatwoot,
 		publicBaseURL: publicBaseURL,
+		recDir:        recordDir,
 	}, nil
 }
