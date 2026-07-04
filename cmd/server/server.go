@@ -27,6 +27,8 @@ type server struct {
 	publicBaseURL string
 	// recDir é o diretório onde as gravações WAV são salvas ("" = gravação desligada).
 	recDir string
+	// storage guarda a config de armazenamento externo (S3/MinIO) das gravações.
+	storage *storageStore
 }
 
 // buildWebRTCAPI monta a *webrtc.API para navegadores remotos.
@@ -95,6 +97,11 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publ
 		return nil, err
 	}
 
+	storage, err := newStorageStore(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
 	return &server{
 		broker:        broker,
 		sessions:      mgr,
@@ -104,5 +111,6 @@ func newServer(ctx context.Context, dbPath, staticDir string, maxCalls int, publ
 		chatwoot:      chatwoot,
 		publicBaseURL: publicBaseURL,
 		recDir:        recordDir,
+		storage:       storage,
 	}, nil
 }

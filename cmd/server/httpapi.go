@@ -34,8 +34,14 @@ func (s *server) routes() http.Handler {
 	mux.HandleFunc("DELETE /api/sessions/{sid}/chatwoot", s.handleChatwootDelete)
 	mux.HandleFunc("POST /api/sessions/{sid}/chatwoot/webhook", s.handleChatwootWebhook)
 
-	// Gravações de chamada (WAV). Servido pelo gateway como proxy.
+	// Gravações de chamada. Servido pelo gateway como proxy.
 	mux.HandleFunc("GET /api/recordings/{id}", s.handleRecording)
+
+	// Configuração de armazenamento externo das gravações (S3/MinIO).
+	mux.HandleFunc("GET /api/storage", s.handleStorageGet)
+	mux.HandleFunc("PUT /api/storage", s.handleStorageSave)
+	mux.HandleFunc("DELETE /api/storage", s.handleStorageDelete)
+	mux.HandleFunc("POST /api/storage/test", s.handleStorageTest)
 
 	mux.HandleFunc("GET /api/events", s.handleEvents)
 
@@ -167,24 +173,26 @@ func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleRecording serve o WAV de uma chamada gravada, por callID.
+// handleRecording serve a gravação de uma chamada por callID. Prioriza o storage
+// externo (Opus, quando configurado); senão cai no WAV local.
 func (s *server) handleRecording(w http.ResponseWriter, r *http.Request) {
-	if s.recDir == "" {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "recording disabled"})
-		return
-	}
 	id := r.PathValue("id")
 	if !safeRecID(id) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bad id"})
 		return
 	}
-	p := filepath.Join(s.recDir, id+".wav")
-	if fi, err := os.Stat(p); err != nil || fi.IsDir() {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no recording"})
+	if s.serveRecordingFromStorage(w, r, id) {
 		return
 	}
-	w.Header().Set("Content-Type", "audio/wav")
-	http.ServeFile(w, r, p)
+	if s.recDir != "" {
+		p := filepath.Join(s.recDir, id+".wav")
+		if fi, err := os.Stat(p); err == nil && !fi.IsDir() {
+			w.Header().Set("Content-Type", "audio/wav")
+			http.ServeFile(w, r, p)
+			return
+		}
+	}
+	writeJSON(w, http.StatusNotFound, map[string]string{"error": "no recording"})
 }
 
 // safeRecID permite só caracteres seguros (bloqueia path traversal).
@@ -272,6 +280,7 @@ func (s *server) doWebRTC(sess *Session, w http.ResponseWriter, r *http.Request)
 	// Cobre entrada e saída, pois ambas passam por aqui ao conectar o áudio.
 	if s.recDir != "" && ac.rec == nil {
 		if rec, err := NewRecorder(filepath.Join(s.recDir, callID+".wav")); err == nil {
+			rec.onDone = s.onRecordingFinalized // ao fechar: encode + upload ao storage
 			ac.rec = rec
 			rec.Start()
 		} else {

@@ -30,7 +30,8 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/wacalls ./cmd/server
 
 # ---- 3. runtime ----
 FROM alpine:3.20
-RUN apk add --no-cache ca-certificates
+# ffmpeg: converte as gravações WAV -> Opus antes de subir ao storage externo.
+RUN apk add --no-cache ca-certificates ffmpeg
 WORKDIR /app
 COPY --from=build /out/wacalls /usr/local/bin/wacalls
 COPY --from=client /client/dist /app/client/dist

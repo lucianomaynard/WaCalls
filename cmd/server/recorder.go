@@ -19,10 +19,14 @@ type Recorder struct {
 	agent    []int16
 	peer     []int16
 	f        *os.File
+	path     string
 	samples  int
 	done     chan struct{}
 	finished chan struct{}
 	closed   bool
+	// onDone é chamado (em goroutine) quando o WAV é finalizado, com o caminho do
+	// arquivo. Usado para o upload ao storage externo.
+	onDone func(path string)
 }
 
 const (
@@ -44,7 +48,7 @@ func NewRecorder(path string) (*Recorder, error) {
 		f.Close()
 		return nil, err
 	}
-	return &Recorder{f: f, done: make(chan struct{}), finished: make(chan struct{})}, nil
+	return &Recorder{f: f, path: path, done: make(chan struct{}), finished: make(chan struct{})}, nil
 }
 
 func (r *Recorder) Start() { go r.loop() }
@@ -160,6 +164,11 @@ func (r *Recorder) Close() {
 		_, _ = r.f.Write(wavHeader(r.samples))
 	}
 	r.f.Close()
+
+	// Só finaliza (upload) se houve áudio de fato.
+	if r.onDone != nil && r.samples > 0 {
+		go r.onDone(r.path)
+	}
 }
 
 // wavHeader monta o header PCM de 44 bytes para WAV mono 16-bit @ recSampleRate.

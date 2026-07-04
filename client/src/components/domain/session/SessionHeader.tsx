@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Loader2, MessageSquare, Power, QrCode } from "lucide-react";
+import { HardDrive, Loader2, MessageSquare, Power, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { logoutSession, pairSession } from "@/services/sessions";
 import { ChatwootIntegrationDialog } from "@/components/domain/session/ChatwootIntegrationDialog";
+import { StorageSettingsDialog } from "@/components/domain/session/StorageSettingsDialog";
 import type { SessionInfo, SessionState } from "@/types/session";
 
 const statusLabel: Record<SessionState, string> = {
@@ -24,6 +25,7 @@ const statusVariant: Record<SessionState, "success" | "secondary" | "muted" | "d
 export const SessionHeader = ({ session }: { session: SessionInfo }) => {
   const [busy, setBusy] = useState(false);
   const [chatwootOpen, setChatwootOpen] = useState(false);
+  const [storageOpen, setStorageOpen] = useState(false);
 
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
@@ -43,6 +45,10 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
         <Badge variant={statusVariant[session.state]}>{statusLabel[session.state]}</Badge>
       </div>
       <div className="flex items-center gap-2">
+        <Button variant="outline" size="sm" onClick={() => setStorageOpen(true)}>
+          <HardDrive className="h-4 w-4" />
+          Gravações
+        </Button>
         {session.paired && (
           <Button variant="outline" size="sm" onClick={() => setChatwootOpen(true)}>
             <MessageSquare className="h-4 w-4" />
@@ -63,6 +69,7 @@ export const SessionHeader = ({ session }: { session: SessionInfo }) => {
       </div>
 
       <ChatwootIntegrationDialog sid={session.id} open={chatwootOpen} onOpenChange={setChatwootOpen} />
+      <StorageSettingsDialog open={storageOpen} onOpenChange={setStorageOpen} />
     </div>
   );
 };
