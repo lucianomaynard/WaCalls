@@ -22,6 +22,7 @@ func main() {
 	udpMuxPort := flag.Int("udp-mux-port", 0, "single UDP port for WebRTC media via ICE UDP mux (0 = default ephemeral ports)")
 	publicBaseURL := flag.String("public-base-url", "", "public base URL used to build the Chatwoot webhook (usually the gateway public URL)")
 	recordDir := flag.String("record-dir", "", "directory to store call recordings as WAV (empty = recording disabled)")
+	recordRetentionHours := flag.Int("record-retention-hours", 168, "delete local recordings older than N hours (backstop; 0 = never)")
 	flag.Parse()
 
 	level := slog.LevelInfo
@@ -45,6 +46,8 @@ func main() {
 		log.Error("session restore failed", "err", err)
 		os.Exit(1)
 	}
+
+	srv.startRecordingJanitor(time.Duration(*recordRetentionHours) * time.Hour)
 
 	httpSrv := &http.Server{Addr: *addr, Handler: srv.routes()}
 	go func() {
