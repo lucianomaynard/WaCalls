@@ -25,7 +25,17 @@ type Bridge struct {
 	OnBrowserPCM func(pcm []float32)
 	// OnTerminalICE fires when the peer connection fails or closes.
 	OnTerminalICE func()
+
+	// disarmed marks this bridge as being replaced in a deliberate handoff
+	// (transferência entre atendentes). While disarmed, closing the peer
+	// connection must NOT fire OnTerminalICE — otherwise swapping the bridge
+	// would tear down the whole call instead of just the old browser leg.
+	disarmed atomic.Bool
 }
+
+// DisarmTerminal marks the bridge so its next close is treated as a handoff and
+// does not terminate the underlying call. Race-free (atomic).
+func (b *Bridge) DisarmTerminal() { b.disarmed.Store(true) }
 
 // NewBridge cria a ponte do browser. Se api != nil, usa-a (SettingEngine com IP
 // público + UDP mux, para browsers remotos); senão cai no default LAN do pion.
@@ -57,6 +67,9 @@ func NewBridge(api *webrtc.API, offerSDP string, log *slog.Logger) (*Bridge, str
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
 		log.Debug("browser ice state", "state", s.String())
 		if s == webrtc.ICEConnectionStateFailed || s == webrtc.ICEConnectionStateClosed {
+			if br.disarmed.Load() {
+				return // handoff em andamento: fechar o bridge antigo não encerra a chamada
+			}
 			if br.OnTerminalICE != nil {
 				br.OnTerminalICE()
 			}

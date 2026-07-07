@@ -241,6 +241,10 @@ func (s *Session) setBridge(callID string, b *Bridge) {
 		return
 	}
 	if oldB != nil {
+		// Handoff/transferência: trocar o browser plugado no callID não pode
+		// encerrar a chamada. Desarmamos o bridge antigo antes de fechá-lo para
+		// que o seu OnTerminalICE (que chamaria terminateCall) não dispare.
+		oldB.DisarmTerminal()
 		oldB.Close()
 	}
 }
