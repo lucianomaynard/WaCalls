@@ -26,8 +26,9 @@ type CallRecord struct {
 	// esconde o número. Vazio quando não há par LID→telefone no store.
 	PeerPhone string `json:"peerPhone,omitempty"`
 	StartedAt int64  `json:"startedAt"`
-	// ConnectedAt marca quando a mídia conectou (houve conversa); nil = não atendida.
-	ConnectedAt *int64     `json:"connectedAt,omitempty"`
+	// ConnectedAt marca quando a mídia conectou (houve conversa); null = não atendida.
+	// Sem omitempty: a ausência do campo indica engine antigo para quem consome o histórico.
+	ConnectedAt *int64     `json:"connectedAt"`
 	Status      CallStatus `json:"status"`
 	EndedAt     *int64     `json:"endedAt,omitempty"`
 	EndReason   string     `json:"endReason,omitempty"`

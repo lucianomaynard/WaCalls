@@ -1,8 +1,10 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"go.mau.fi/whatsmeow/types"
@@ -59,5 +61,15 @@ func TestBrokerKeepsConnectedAtAndPhone(t *testing.T) {
 	rows := b.historyRows("s", 10)
 	if len(rows) != 1 || rows[0].PeerPhone != "5579999446677" || rows[0].ConnectedAt == nil || *rows[0].ConnectedAt != at {
 		t.Fatalf("history lost peerPhone/connectedAt: %+v", rows)
+	}
+}
+
+func TestConnectedAtAlwaysSerialized(t *testing.T) {
+	b, err := json.Marshal(CallRecord{CallID: "X", Direction: "outbound", Status: StatusEnded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), `"connectedAt":null`) {
+		t.Fatalf("connectedAt must be present as null when not answered: %s", b)
 	}
 }
