@@ -38,6 +38,10 @@ type Session struct {
 	bridges  map[string]*Bridge
 	grace    *graceKeeper
 
+	// Gravações em andamento por callID (perfex_calls); nil = gravação falhou para a chamada.
+	recMu sync.Mutex
+	recs  map[string]*Recorder
+
 	// offlineReplaying is set while WhatsApp is replaying events buffered during downtime, so
 	// stale call offers from that window are dropped instead of surfacing as ghost ringing calls.
 	offlineReplaying atomic.Bool
@@ -65,6 +69,7 @@ func newSession(mgr *Manager, id, name string, client *whatsmeow.Client) *Sessio
 		client:  client,
 		auth:    events.AuthSnapshot{State: "connecting"},
 		bridges: map[string]*Bridge{},
+		recs:    map[string]*Recorder{},
 	}
 	s.grace = newGraceKeeper(browserGraceWindow, func(callID string) {
 		s.log.Warn("call ended: browser did not return within the grace window", "call_id", callID)
@@ -134,6 +139,11 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 			rec.Peer = existing.Peer
 			rec.PeerName = existing.PeerName
 			rec.PeerPhotoURL = existing.PeerPhotoURL
+			rec.ConnectedAt = existing.ConnectedAt
+		}
+		if rec.ConnectedAt == nil && rec.Status == events.StatusConnected && c.StateData.ConnectedAt != nil {
+			ms := c.StateData.ConnectedAt.UnixMilli()
+			rec.ConnectedAt = &ms
 		}
 		s.mgr.broker.UpsertCall(rec)
 	}
@@ -143,6 +153,7 @@ func (s *Session) wireCall(callID string, cm *call.CallManager) {
 		s.mgr.broker.EndCall(c.CallID, string(c.StateData.EndReason))
 	}
 	cm.OnPeerAudio = func(pcm16 []float32) {
+		s.recorderFor(callID).WritePeer(pcm16) // grava o lado do cliente
 		if b := s.getBridge(callID); b != nil {
 			_ = b.WritePCM(pcm16)
 		}
@@ -313,6 +324,7 @@ func (s *Session) removeCall(callID string) {
 	if b != nil {
 		b.Close()
 	}
+	s.closeRecorder(callID)
 	s.calls.Remove(callID)
 }
 
@@ -325,6 +337,7 @@ func (s *Session) teardownAllCalls() {
 		_ = cm.EndCall(context.Background(), core.EndCallReasonUserEnded)
 	}
 	s.grace.stopAll()
+	s.closeAllRecorders()
 	s.bridgeMu.Lock()
 	bridges := s.bridges
 	s.bridges = map[string]*Bridge{}

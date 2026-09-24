@@ -27,28 +27,33 @@ type Config struct {
 	TrustedProxies string
 	DiagDir        string
 	STUNServers    []string
+	// Gravação das chamadas (perfex_calls): pasta e retenção local em horas (padrão 168 = 7 dias).
+	RecordDir       string
+	RecordRetention int
 }
 
 func LoadConfig(addr, dbPath, staticDir string, debug bool, maxCalls int) Config {
 	return Config{
-		Addr:           addr,
-		DBPath:         dbPath,
-		StaticDir:      staticDir,
-		Debug:          debug,
-		MaxCalls:       maxCalls,
-		DatabaseURL:    os.Getenv("DATABASE_URL"),
-		APIToken:       os.Getenv("WACALLS_API_TOKEN"),
-		AdminUser:      strings.TrimSpace(os.Getenv("WACALLS_ADMIN_USER")),
-		AdminPassword:  os.Getenv("WACALLS_ADMIN_PASSWORD"),
-		CORSOrigins:    os.Getenv("WACALLS_CORS_ORIGINS"),
-		RateLimit:      parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
-		WebRTCUDPPort:  parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
-		PublicIPs:      parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
-		WebhookURL:     strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
-		WebhookSecret:  os.Getenv("WACALLS_WEBHOOK_SECRET"),
-		TrustedProxies: os.Getenv("WACALLS_TRUSTED_PROXIES"),
-		DiagDir:        strings.TrimSpace(os.Getenv("WACALLS_DIAG_DIR")),
-		STUNServers:    parseSTUNServers(os.Getenv("WACALLS_STUN_SERVER")),
+		Addr:            addr,
+		DBPath:          dbPath,
+		StaticDir:       staticDir,
+		Debug:           debug,
+		MaxCalls:        maxCalls,
+		DatabaseURL:     os.Getenv("DATABASE_URL"),
+		APIToken:        os.Getenv("WACALLS_API_TOKEN"),
+		AdminUser:       strings.TrimSpace(os.Getenv("WACALLS_ADMIN_USER")),
+		AdminPassword:   os.Getenv("WACALLS_ADMIN_PASSWORD"),
+		CORSOrigins:     os.Getenv("WACALLS_CORS_ORIGINS"),
+		RateLimit:       parseRateLimit(os.Getenv("WACALLS_RATE_LIMIT")),
+		WebRTCUDPPort:   parseUDPPort(os.Getenv("WACALLS_WEBRTC_UDP_PORT")),
+		PublicIPs:       parsePublicIPs(os.Getenv("WACALLS_PUBLIC_IP")),
+		WebhookURL:      strings.TrimSpace(os.Getenv("WACALLS_WEBHOOK_URL")),
+		WebhookSecret:   os.Getenv("WACALLS_WEBHOOK_SECRET"),
+		TrustedProxies:  os.Getenv("WACALLS_TRUSTED_PROXIES"),
+		DiagDir:         strings.TrimSpace(os.Getenv("WACALLS_DIAG_DIR")),
+		STUNServers:     parseSTUNServers(os.Getenv("WACALLS_STUN_SERVER")),
+		RecordDir:       strings.TrimSpace(os.Getenv("WACALLS_RECORD_DIR")),
+		RecordRetention: parseRetentionHours(os.Getenv("WACALLS_RECORD_RETENTION_HOURS")),
 	}
 }
 
@@ -75,6 +80,14 @@ func parseRateLimit(raw string) float64 {
 	}
 	if n < 0 {
 		return 0
+	}
+	return n
+}
+
+func parseRetentionHours(raw string) int {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n < 0 {
+		return 168
 	}
 	return n
 }

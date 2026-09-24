@@ -151,6 +151,30 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "429": { $ref: "#/components/responses/RateLimited" }
+  /api/sessions/{sid}/qr:
+    get:
+      operationId: getSessionQR
+      summary: Pairing state and the latest QR code (polling alternative to SSE)
+      parameters:
+        - $ref: "#/components/parameters/Sid"
+      responses:
+        "200":
+          description: Current auth snapshot; qr is present only while waiting for a scan
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [state, paired]
+                properties:
+                  state:
+                    type: string
+                  paired:
+                    type: boolean
+                  qr:
+                    type: string
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/sessions/{sid}/calls:
     post:
       operationId: startCall
@@ -578,6 +602,33 @@ paths:
           description: Password changed
         "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+  /api/recordings/{id}:
+    get:
+      operationId: getRecording
+      summary: Call recording (WAV, 16 kHz mono, agent + peer mixed)
+      description: >-
+        Served only when WACALLS_RECORD_DIR is set; recordings older than
+        WACALLS_RECORD_RETENTION_HOURS (default 168) are removed. Supports Range requests.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Call id (alphanumeric, 6-64 chars)
+          schema:
+            type: string
+      responses:
+        "200":
+          description: The WAV file
+          content:
+            audio/wav:
+              schema:
+                type: string
+                format: binary
+        "206":
+          description: Partial content (Range request)
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "429": { $ref: "#/components/responses/RateLimited" }
   /api/version:
     get:
       operationId: getVersion

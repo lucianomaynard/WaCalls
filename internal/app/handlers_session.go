@@ -51,6 +51,16 @@ func (s *Server) handleSessionPair(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleSessionQR returns the pairing state and the latest QR code (perfex_calls): the Perfex
+// module renders it server-side instead of opening the engine UI through an SSH tunnel.
+func (s *Server) handleSessionQR(w http.ResponseWriter, r *http.Request) {
+	sess := s.sessionByID(w, r.PathValue("sid"))
+	if sess == nil {
+		return
+	}
+	writeJSON(w, http.StatusOK, sess.Auth())
+}
+
 func (s *Server) handleSessionRename(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Name string `json:"name"`

@@ -21,6 +21,7 @@ var apiRoutes = []struct {
 	{"PATCH", "/sessions/{sid}", (*Server).handleSessionRename},
 	{"POST", "/sessions/{sid}/logout", (*Server).handleSessionLogout},
 	{"POST", "/sessions/{sid}/pair", (*Server).handleSessionPair},
+	{"GET", "/sessions/{sid}/qr", (*Server).handleSessionQR},
 	{"POST", "/sessions/{sid}/calls", (*Server).handleStartCall},
 	{"GET", "/sessions/{sid}/calls", (*Server).handleCallList},
 	{"GET", "/sessions/{sid}/calls/{id}", (*Server).handleCallGet},
@@ -37,6 +38,7 @@ var apiRoutes = []struct {
 	{"POST", "/logout", (*Server).handleLogout},
 	{"POST", "/auth/password", (*Server).handlePassword},
 	{"GET", "/events", (*Server).handleEvents},
+	{"GET", "/recordings/{id}", (*Server).handleRecording},
 }
 
 func (s *Server) routes() http.Handler {
@@ -154,6 +156,29 @@ func (s *Server) sessionByID(w http.ResponseWriter, sid string) *session.Session
 
 func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 	s.broker.ServeSSE(w, r, clientID(r))
+}
+
+// handleRecording serve a gravação WAV de uma chamada (perfex_calls), com suporte a Range
+// (o player do navegador avança/volta). Exige a mesma autenticação do resto da /api.
+func (s *Server) handleRecording(w http.ResponseWriter, r *http.Request) {
+	path := session.RecordingPath(s.recordDir, r.PathValue("id"))
+	if path == "" {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such recording"})
+		return
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such recording"})
+		return
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
+	if err != nil || info.Size() <= 44 {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such recording"})
+		return
+	}
+	w.Header().Set("Content-Type", "audio/wav")
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }
 
 func (s *Server) handleVersion(w http.ResponseWriter, _ *http.Request) {

@@ -52,6 +52,7 @@ type Server struct {
 	auth           core.AuthStore
 	apiToken       string
 	loginLimiter   *ipRateLimiter
+	recordDir      string
 }
 
 func parseOrigins(raw string) map[string]struct{} {
@@ -105,8 +106,9 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 	mgr := session.NewManager(session.Deps{
 		Ctx: ctx, Container: bundle.Container, WebRTCAPI: api, Broker: broker,
 		Store: bundle.Sessions, WALogger: waLogger, Log: log, MaxCalls: cfg.MaxCalls,
-		NewObserver: obsFactory, Tracer: tracer, Photos: bundle.Photos,
+		NewObserver: obsFactory, Tracer: tracer, Photos: bundle.Photos, RecordDir: cfg.RecordDir,
 	})
+	session.StartRecordingJanitor(ctx, cfg.RecordDir, time.Duration(cfg.RecordRetention)*time.Hour, log)
 	broker.SnapshotFn = mgr.SnapshotEvents
 
 	if cfg.DiagDir != "" {
@@ -148,6 +150,7 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 		photos:         bundle.Photos,
 		auth:           bundle.Auth,
 		apiToken:       cfg.APIToken,
+		recordDir:      cfg.RecordDir,
 		loginLimiter:   newIPRateLimiterWithBurst(loginRateRPS, loginRateBurst),
 	}
 	go srv.loginLimiter.janitor(ctx)

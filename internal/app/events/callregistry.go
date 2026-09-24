@@ -32,6 +32,9 @@ type CallRecord struct {
 	Status       CallStatus `json:"status"`
 	EndedAt      *int64     `json:"endedAt,omitempty"`
 	EndReason    string     `json:"endReason,omitempty"`
+	// ConnectedAt: when the media connected (unix ms); null = not answered. Always present
+	// (no omitempty) so consumers can tell "not answered" from an older engine.
+	ConnectedAt *int64 `json:"connectedAt"`
 }
 
 func OwnerRef(owner string) *string {
@@ -62,7 +65,7 @@ func (b *Broker) UpsertCall(r CallRecord) {
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
 		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
-		"peerName": r.PeerName, "peerPhotoUrl": r.PeerPhotoURL,
+		"peerName": r.PeerName, "peerPhotoUrl": r.PeerPhotoURL, "connectedAt": r.ConnectedAt,
 	})
 }
 
@@ -152,10 +155,14 @@ func (b *Broker) persist(rec CallRecord) {
 	if rec.EndedAt != nil {
 		endedAt = *rec.EndedAt
 	}
+	var connectedAt int64
+	if rec.ConnectedAt != nil {
+		connectedAt = *rec.ConnectedAt
+	}
 	cr := core.CallRecord{
 		CallID: rec.CallID, SessionID: rec.SessionID, Owner: rec.Owner,
 		Direction: rec.Direction, Peer: rec.Peer,
-		StartedAt: rec.StartedAt, EndedAt: endedAt, EndReason: rec.EndReason,
+		StartedAt: rec.StartedAt, EndedAt: endedAt, EndReason: rec.EndReason, ConnectedAt: connectedAt,
 	}
 	if err := b.records.Insert(ctx, cr); err != nil {
 		b.log.Error("persist call record", "call_id", rec.CallID, "err", err)
@@ -215,10 +222,15 @@ func (b *Broker) HistoryRows(ctx context.Context, sessionID string, limit int, b
 	rows := make([]CallRecord, 0, len(recs))
 	for _, r := range recs {
 		endedAt := r.EndedAt
+		var connectedAt *int64
+		if r.ConnectedAt > 0 {
+			c := r.ConnectedAt
+			connectedAt = &c
+		}
 		rows = append(rows, CallRecord{
 			SessionID: r.SessionID, CallID: r.CallID, Owner: r.Owner, Direction: r.Direction,
 			Peer: r.Peer, StartedAt: r.StartedAt, Status: StatusEnded,
-			EndedAt: &endedAt, EndReason: r.EndReason,
+			EndedAt: &endedAt, EndReason: r.EndReason, ConnectedAt: connectedAt,
 		})
 	}
 	return rows, next, nil

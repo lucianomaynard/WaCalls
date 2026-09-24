@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"wacalls/internal/app/events"
 	"wacalls/internal/voip/call"
 	"wacalls/internal/voip/core"
 
@@ -18,6 +19,15 @@ type StartedCall struct{ CallID, Peer, PeerName, PeerPhotoURL string }
 func (s *Session) ID() string { return s.id }
 
 func (s *Session) IsPaired() bool { return s.client.Store.ID != nil }
+
+// Auth returns the current pairing state, including the latest QR code while pairing. The QR only
+// travels over SSE otherwise; this lets a server-side consumer (the perfex_calls Perfex module)
+// poll it without holding an event stream open.
+func (s *Session) Auth() events.AuthSnapshot {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.auth
+}
 
 func (s *Session) HasCall(callID string) bool {
 	_, ok := s.calls.Get(callID)
@@ -82,7 +92,10 @@ func (s *Session) AttachBrowser(callID, offerSDP string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	bridge.OnBrowserPCM = func(pcm []float32) { cm.FeedCapturedPCM(pcm) }
+	bridge.OnBrowserPCM = func(pcm []float32) {
+		cm.FeedCapturedPCM(pcm)
+		s.recorderFor(callID).WriteAgent(pcm) // grava o lado do atendente
+	}
 	bridge.OnTerminalICE = func() { go s.onBridgeDetached(callID, bridge) }
 	s.setBridge(callID, bridge)
 	return answer, nil

@@ -31,6 +31,7 @@ type Manager struct {
 	newObserver func(string) core.CallObserver
 	tracer      telemetry.CallTracer
 	photos      core.ContactPhotoStore
+	recordDir   string // gravações WAV por chamada (perfex_calls); "" = desligado
 
 	mu       sync.RWMutex
 	sessions map[string]*Session
@@ -55,6 +56,7 @@ type Deps struct {
 	NewObserver func(string) core.CallObserver
 	Tracer      telemetry.CallTracer
 	Photos      core.ContactPhotoStore
+	RecordDir   string
 }
 
 func NewManager(d Deps) *Manager {
@@ -76,6 +78,7 @@ func NewManager(d Deps) *Manager {
 		newObserver: d.NewObserver,
 		tracer:      d.Tracer,
 		photos:      d.Photos,
+		recordDir:   d.RecordDir,
 		sessions:    map[string]*Session{},
 	}
 }

@@ -38,6 +38,9 @@ type CallRecord struct {
 	StartedAt int64
 	EndedAt   int64
 	EndReason string
+	// ConnectedAt is when the media connected (unix ms); 0 = never answered. Lets consumers tell
+	// answered from missed/unanswered calls and compute the real talk time (perfex_calls).
+	ConnectedAt int64
 }
 
 type HistoryCursor struct {

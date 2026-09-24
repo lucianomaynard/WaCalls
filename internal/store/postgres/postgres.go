@@ -63,6 +63,7 @@ var migrations = [][]string{
 		created_at BIGINT NOT NULL
 	)`,
 		`CREATE INDEX idx_auth_session_expires ON auth_session (expires_at)`},
+	{`ALTER TABLE call_records ADD COLUMN connected_at BIGINT NOT NULL DEFAULT 0`},
 }
 
 func Open(ctx context.Context, databaseURL string) (*Bundle, error) {
@@ -136,15 +137,15 @@ type callRecordStore struct{ db *sql.DB }
 
 func (s *callRecordStore) Insert(ctx context.Context, r core.CallRecord) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO call_records
-		(call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		(call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason, connected_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		ON CONFLICT (call_id) DO NOTHING`,
-		r.CallID, r.SessionID, r.Owner, r.Direction, r.Peer, r.StartedAt, r.EndedAt, r.EndReason)
+		r.CallID, r.SessionID, r.Owner, r.Direction, r.Peer, r.StartedAt, r.EndedAt, r.EndReason, r.ConnectedAt)
 	return err
 }
 
 func (s *callRecordStore) List(ctx context.Context, sessionID string, limit int, before core.HistoryCursor) ([]core.CallRecord, error) {
-	q := `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason FROM call_records`
+	q := `SELECT call_id, session_id, owner, direction, peer, started_at, ended_at, end_reason, connected_at FROM call_records`
 	var conds []string
 	var args []any
 	arg := func(v any) string {
@@ -171,7 +172,7 @@ func (s *callRecordStore) List(ctx context.Context, sessionID string, limit int,
 	var out []core.CallRecord
 	for rows.Next() {
 		var r core.CallRecord
-		if err := rows.Scan(&r.CallID, &r.SessionID, &r.Owner, &r.Direction, &r.Peer, &r.StartedAt, &r.EndedAt, &r.EndReason); err != nil {
+		if err := rows.Scan(&r.CallID, &r.SessionID, &r.Owner, &r.Direction, &r.Peer, &r.StartedAt, &r.EndedAt, &r.EndReason, &r.ConnectedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

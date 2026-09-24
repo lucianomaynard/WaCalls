@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -119,5 +120,65 @@ func TestContactPhotoStore(t *testing.T) {
 	}
 	if m2, err := b.Photos.GetMany(ctx, "s1", nil); err != nil || len(m2) != 0 {
 		t.Fatalf("getmany empty: %+v err=%v", m2, err)
+	}
+}
+
+// perfex_calls: a hora do atendimento sobrevive à gravação/leitura do histórico.
+func TestCallRecordConnectedAt(t *testing.T) {
+	ctx := context.Background()
+	b, err := Open(ctx, filepath.Join(t.TempDir(), "calls.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = b.Close() }()
+	owner := "op1"
+	if err := b.Calls.Insert(ctx, core.CallRecord{CallID: "A1", SessionID: "s", Owner: &owner, Direction: "inbound", Peer: "5579@s.whatsapp.net", StartedAt: 100, EndedAt: 300, EndReason: "user_ended", ConnectedAt: 150}); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Calls.Insert(ctx, core.CallRecord{CallID: "A2", SessionID: "s", Direction: "outbound", Peer: "5579@s.whatsapp.net", StartedAt: 400, EndedAt: 500, EndReason: "user_ended"}); err != nil {
+		t.Fatal(err)
+	}
+	rows, err := b.Calls.List(ctx, "s", 10, core.HistoryCursor{})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("list: %v %+v", err, rows)
+	}
+	got := map[string]int64{rows[0].CallID: rows[0].ConnectedAt, rows[1].CallID: rows[1].ConnectedAt}
+	if got["A1"] != 150 || got["A2"] != 0 {
+		t.Fatalf("connected_at errado: %+v", got)
+	}
+}
+
+// perfex_calls: o banco do fork (tabela sessions sem schema_migrations, tabelas extras do
+// Chatwoot/storage) é aberto e migrado sem perder a sessão do WhatsApp.
+func TestOpenForkDatabase(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "fork.db")
+	raw, err := sql.Open("sqlite", "file:"+path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stmt := range []string{
+		`CREATE TABLE sessions (id TEXT PRIMARY KEY, name TEXT NOT NULL, jid TEXT)`,
+		`INSERT INTO sessions VALUES ('037c1f8f', 'WhatsApp', '557991233799:13@s.whatsapp.net')`,
+		`CREATE TABLE chatwoot_integration (session_id TEXT PRIMARY KEY, base_url TEXT NOT NULL)`,
+		`CREATE TABLE storage_config (id INTEGER PRIMARY KEY CHECK (id = 1), provider TEXT NOT NULL DEFAULT 'minio')`,
+	} {
+		if _, err := raw.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = raw.Close()
+
+	b, err := Open(ctx, path)
+	if err != nil {
+		t.Fatalf("open do banco do fork: %v", err)
+	}
+	defer func() { _ = b.Close() }()
+	list, err := b.Sessions.List(ctx)
+	if err != nil || len(list) != 1 || list[0].ID != "037c1f8f" {
+		t.Fatalf("sessão do fork perdida: %v %+v", err, list)
+	}
+	if err := b.Calls.Insert(ctx, core.CallRecord{CallID: "X1", SessionID: "037c1f8f", Direction: "inbound", Peer: "p", StartedAt: 1, EndedAt: 2, ConnectedAt: 1}); err != nil {
+		t.Fatalf("histórico no banco migrado: %v", err)
 	}
 }
