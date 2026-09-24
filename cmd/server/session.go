@@ -56,11 +56,12 @@ func (s *Session) createCall(callID string) *call.CallManager {
 
 func (s *Session) wireCall(cm *call.CallManager, callID string) {
 	cm.OnIncoming = func(c *call.CallInfo) {
+		phone := s.peerPhone(c.PeerJid)
 		s.mgr.broker.upsertCall(CallRecord{
-			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid,
+			SessionID: s.id, CallID: c.CallID, Direction: "inbound", Peer: c.PeerJid, PeerPhone: phone,
 			StartedAt: time.Now().UnixMilli(), Status: StatusRinging,
 		})
-		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid)
+		s.mgr.broker.emitIncoming(s.id, c.CallID, c.PeerJid, phone)
 	}
 	cm.OnStateChange = func(c *call.CallInfo) {
 		if c.IsEnded() {
@@ -80,6 +81,15 @@ func (s *Session) wireCall(cm *call.CallManager, callID string) {
 		if existing != nil {
 			rec.Owner = existing.Owner
 			rec.StartedAt = existing.StartedAt
+			rec.PeerPhone = existing.PeerPhone
+			rec.ConnectedAt = existing.ConnectedAt
+		}
+		if rec.PeerPhone == "" {
+			rec.PeerPhone = s.peerPhone(c.PeerJid)
+		}
+		if rec.Status == StatusConnected && rec.ConnectedAt == nil {
+			now := time.Now().UnixMilli()
+			rec.ConnectedAt = &now
 		}
 		s.mgr.broker.upsertCall(rec)
 	}

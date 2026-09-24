@@ -30,9 +30,9 @@ type Recorder struct {
 }
 
 const (
-	recSampleRate  = 16000
-	recFrame       = 320             // 20 ms @ 16 kHz
-	recMaxBacklog  = recSampleRate * 5 // limita 5 s por direção (evita crescer sem fim)
+	recSampleRate = 16000
+	recFrame      = 320               // 20 ms @ 16 kHz
+	recMaxBacklog = recSampleRate * 5 // limita 5 s por direção (evita crescer sem fim)
 )
 
 // NewRecorder cria o arquivo WAV com um header placeholder (corrigido no Close).

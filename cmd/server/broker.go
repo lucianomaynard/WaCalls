@@ -17,16 +17,24 @@ const (
 )
 
 type CallRecord struct {
-	SessionID string     `json:"sessionId"`
-	CallID    string     `json:"callId"`
-	Owner     *string    `json:"owner"`
-	Direction string     `json:"direction"`
-	Peer      string     `json:"peer"`
-	StartedAt int64      `json:"startedAt"`
-	Status    CallStatus `json:"status"`
-	EndedAt   *int64     `json:"endedAt,omitempty"`
-	EndReason string     `json:"endReason,omitempty"`
+	SessionID string  `json:"sessionId"`
+	CallID    string  `json:"callId"`
+	Owner     *string `json:"owner"`
+	Direction string  `json:"direction"`
+	Peer      string  `json:"peer"`
+	// PeerPhone é o telefone do outro lado (só dígitos), resolvido do LID quando o WhatsApp
+	// esconde o número. Vazio quando não há par LID→telefone no store.
+	PeerPhone string `json:"peerPhone,omitempty"`
+	StartedAt int64  `json:"startedAt"`
+	// ConnectedAt marca quando a mídia conectou (houve conversa); nil = não atendida.
+	ConnectedAt *int64     `json:"connectedAt,omitempty"`
+	Status      CallStatus `json:"status"`
+	EndedAt     *int64     `json:"endedAt,omitempty"`
+	EndReason   string     `json:"endReason,omitempty"`
 }
+
+// maxHistory limita o histórico em memória (antes crescia sem limite enquanto o processo vivia).
+const maxHistory = 1000
 
 type AuthSnapshot struct {
 	State  string `json:"state"`
@@ -116,7 +124,8 @@ func (b *Broker) upsertCall(r CallRecord) {
 	b.broadcastCallList()
 	b.broadcast(map[string]any{
 		"type": "call-status", "sessionId": r.SessionID, "id": r.CallID, "owner": r.Owner,
-		"status": r.Status, "peer": r.Peer, "startedAt": r.StartedAt,
+		"status": r.Status, "peer": r.Peer, "peerPhone": r.PeerPhone, "startedAt": r.StartedAt,
+		"connectedAt": r.ConnectedAt,
 	})
 }
 
@@ -173,6 +182,9 @@ func (b *Broker) endCall(id, reason string) {
 	ended := *c
 	delete(b.calls, id)
 	b.history = append(b.history, ended)
+	if len(b.history) > maxHistory {
+		b.history = append([]CallRecord(nil), b.history[len(b.history)-maxHistory:]...)
+	}
 	owner := c.Owner
 	sessionID := c.SessionID
 	b.mu.Unlock()
@@ -193,9 +205,10 @@ func (b *Broker) broadcastCallList() {
 	b.broadcast(map[string]any{"type": "call-list", "calls": list})
 }
 
-func (b *Broker) emitIncoming(sessionID, id, peer string) {
+func (b *Broker) emitIncoming(sessionID, id, peer, peerPhone string) {
 	b.broadcast(map[string]any{
-		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer, "offeredAt": time.Now().UnixMilli(),
+		"type": "incoming", "sessionId": sessionID, "id": id, "peer": peer, "peerPhone": peerPhone,
+		"offeredAt": time.Now().UnixMilli(),
 	})
 }
 
