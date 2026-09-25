@@ -113,6 +113,16 @@ func (m *CallManager) CurrentCall() *CallInfo {
 	return m.currentCall
 }
 
+// Answered reports whether the current call was accepted (by the peer on an outgoing call, by us
+// on an incoming one) and has not ended. The recording starts there: before it, the agent's
+// microphone is already open while the call rings.
+func (m *CallManager) Answered() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c := m.currentCall
+	return c != nil && c.StateData.AcceptedAt != nil && !c.IsEnded()
+}
+
 func (m *CallManager) emitState() {
 	if m.OnStateChange != nil && m.currentCall != nil {
 		m.OnStateChange(m.currentCall)

@@ -11,7 +11,9 @@ import (
 )
 
 // Gravação das chamadas (perfex_calls): WAV por chamada em <recordDir>/<callID>.wav, criado no
-// primeiro áudio (atendente ou cliente) e finalizado quando a chamada sai do registro.
+// primeiro áudio (atendente ou cliente) DEPOIS do atendimento e finalizado quando a chamada sai do
+// registro. Antes do atendimento nada é gravado: o microfone da equipe já está aberto enquanto chama,
+// e a ligação não atendida virava um arquivo só com o som do ambiente.
 // Desligada quando recordDir está vazio (WACALLS_RECORD_DIR).
 
 var recordingIDRe = regexp.MustCompile(`^[A-Za-z0-9_-]{6,64}$`)
@@ -38,7 +40,7 @@ func (s *Session) recorderFor(callID string) *Recorder {
 	if path == "" {
 		return nil
 	}
-	if _, live := s.calls.Get(callID); !live {
+	if cm, live := s.calls.Get(callID); !live || !cm.Answered() {
 		return nil
 	}
 	r, err := NewRecorder(path)
