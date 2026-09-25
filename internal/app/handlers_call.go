@@ -71,6 +71,8 @@ func (s *Server) doStartCall(sess *session.Session, w http.ResponseWriter, r *ht
 		return
 	}
 	if err != nil {
+		// Sem isto o 500 chegava ao gateway sem nenhuma pista no log do engine.
+		s.log.Warn("start call failed", "session", sess.ID(), "phone", maskPhone(phone), "err", err)
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
@@ -206,4 +208,12 @@ func normalizePhone(p string) string {
 		}
 	}
 	return b.String()
+}
+
+// maskPhone keeps only the country/area prefix and the last 4 digits for the logs.
+func maskPhone(p string) string {
+	if len(p) <= 8 {
+		return "…"
+	}
+	return p[:4] + "…" + p[len(p)-4:]
 }
