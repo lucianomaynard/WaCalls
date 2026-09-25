@@ -37,6 +37,9 @@ const (
 	EndCallReasonFailed       EndCallReason = "failed"
 	EndCallReasonDoNotDisturb EndCallReason = "do_not_disturb"
 	EndCallReasonUnknown      EndCallReason = "unknown"
+	// EndCallReasonAnsweredElsewhere: inbound call answered on another device of the same
+	// account (the phone). The engine stops ringing without signalling anyone.
+	EndCallReasonAnsweredElsewhere EndCallReason = "answered_elsewhere"
 )
 
 const (

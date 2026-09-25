@@ -90,6 +90,26 @@ func (m *CallManager) HandleCallOffer(ctx context.Context, node *waBinary.Node, 
 func (m *CallManager) HandleCallAccept(ctx context.Context, node *waBinary.Node, peerJid types.JID) {
 	m.mu.Lock()
 	call := m.currentCall
+	// Inbound call answered on another device of our own account (the phone): the call is
+	// not ours to join. Treating that accept as the peer answering left the call "ringing"
+	// until the 60 s timeout, recorded it as missed, and the timeout's terminate went to the
+	// device that answered — hanging up the phone. Stop quietly, with no stanza at all.
+	if call != nil && !call.IsInitiator() && call.StateData.State == core.CallStateIncomingRinging && m.isOwnAccountLocked(peerJid) {
+		if info := signaling.ExtractNodeInfo(node); info == nil || info.CallID != call.CallID {
+			m.mu.Unlock()
+			return
+		}
+		_ = call.ApplyTransition(Transition{Type: TransitionTerminated, Reason: core.EndCallReasonAnsweredElsewhere})
+		ended := call
+		m.emitState()
+		m.mu.Unlock()
+		m.log.Info("incoming call answered on another device of this account", "call_id", ended.CallID, "device", peerJid.String())
+		if m.OnEnded != nil {
+			m.OnEnded(ended)
+		}
+		m.cleanupMedia()
+		return
+	}
 	// First accept wins: a later accept from a SIBLING device must not swap
 	// acceptedByJid and rekey SRTP under an established media path. A retry from
 	// the same device passes through: its first accept may have carried a call key

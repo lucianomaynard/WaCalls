@@ -313,6 +313,21 @@ func (m *CallManager) SetMute(ctx context.Context, muted bool) error {
 	return nil
 }
 
+// isOwnAccountLocked reports whether jid is a device of our own account (same user as our
+// LID or phone number), e.g. the phone this session is paired to. Caller holds m.mu.
+func (m *CallManager) isOwnAccountLocked(jid types.JID) bool {
+	if jid.User == "" {
+		return false
+	}
+	if lid := m.sock.OwnLID(); !lid.IsEmpty() && lid.User == jid.User {
+		return true
+	}
+	if pn := m.sock.OwnPN(); !pn.IsEmpty() && pn.User == jid.User {
+		return true
+	}
+	return false
+}
+
 func (m *CallManager) ownCredJid() string {
 	lid := m.sock.OwnLID()
 	if !lid.IsEmpty() {
