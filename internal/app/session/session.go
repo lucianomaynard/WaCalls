@@ -182,7 +182,30 @@ func (s *Session) handleEvent(rawEvt any) {
 		go s.fetchOwnPhoto()
 		s.setAuth(events.AuthSnapshot{State: "open", Paired: true})
 	case *waevents.LoggedOut:
+		s.log.Warn("whatsapp logged out", "reason", evt.Reason.String())
 		s.setAuth(events.AuthSnapshot{State: "logged_out", Paired: false})
+	// Quedas: sem estes casos o estado ficava "open" com o websocket fechado e a única
+	// pista era o 500 de iniciar chamada ("websocket not connected").
+	case *waevents.Disconnected:
+		// O whatsmeow reconecta sozinho; Connected volta o estado para "open".
+		s.log.Warn("whatsapp websocket disconnected; auto-reconnect pending")
+		s.setAuth(events.AuthSnapshot{State: "connecting", Paired: true})
+	case *waevents.KeepAliveTimeout:
+		s.log.Warn("whatsapp keepalive timeout", "errors", evt.ErrorCount)
+	case *waevents.ClientOutdated:
+		// 405: o WhatsApp recusa a versão do whatsmeow; não há reconexão automática.
+		// Correção: atualizar go.mau.fi/whatsmeow e gerar nova imagem do engine.
+		s.log.Error("whatsapp rejected client as outdated (405): update whatsmeow and rebuild the engine")
+		s.setAuth(events.AuthSnapshot{State: "client_outdated", Paired: true})
+	case *waevents.StreamReplaced:
+		s.log.Error("whatsapp stream replaced: the same device connected elsewhere")
+		s.setAuth(events.AuthSnapshot{State: "stream_replaced", Paired: true})
+	case *waevents.TemporaryBan:
+		s.log.Error("whatsapp temporary ban", "code", int(evt.Code), "expire", evt.Expire.String())
+		s.setAuth(events.AuthSnapshot{State: "temporary_ban", Paired: true})
+	case *waevents.ConnectFailure:
+		s.log.Error("whatsapp connect failure", "reason", int(evt.Reason), "message", evt.Message)
+		s.setAuth(events.AuthSnapshot{State: "connect_failure", Paired: true})
 	case *waevents.OfflineSyncPreview:
 		// The server is about to replay events missed while offline; drop call offers until it
 		// finishes. A backstop timer clears the window if OfflineSyncCompleted is never seen.

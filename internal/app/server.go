@@ -97,7 +97,9 @@ func NewServer(ctx context.Context, cfg config.Config, obsFactory func(string) c
 		return nil, err
 	}
 
-	waLogger := waLog.Noop
+	// Avisos e erros do whatsmeow sempre no log (antes era Noop fora do -debug, e a
+	// recusa "Client outdated (405)" passou dias sem deixar rastro).
+	waLogger := waLog.Stdout("WA", "WARN", false)
 	if log.Enabled(ctx, slog.LevelDebug) {
 		waLogger = waLog.Stdout("WA", "INFO", true)
 	}
